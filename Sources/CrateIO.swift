@@ -1,6 +1,7 @@
 
 import SocksCore
-
+import JSON
+import Foundation
 
 public class CrateIO {
 
@@ -15,7 +16,7 @@ public class CrateIO {
 
   	}
 
-    public func sql (statement: String) -> String {
+    public func sql (statement: String) -> JSON {
       print("\(statement)")
 
       let post = "{\"stmt\": \"\(statement)\"}\r\n"
@@ -23,7 +24,7 @@ public class CrateIO {
 
       let request = "POST /_sql HTTP/1.1\r\nContent-Length: \(postBytes.count)\r\nContent-Type: application/json\r\n\r\n\(post)"
 
-      print(request)
+//      print(request)
       try! socket.send(request.toBytes())
 
 
@@ -35,7 +36,8 @@ public class CrateIO {
 
       //yay!
       print("Received: \n\(str)")
-      return str
+      // let NSUTF8StringEncoding = 8
+      return try! JSONParser().parse(Data(NSString(string: str).componentsSeparatedByString("\r\n\r\n")[1]))
     }
 
     deinit {
