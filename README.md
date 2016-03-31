@@ -15,6 +15,7 @@ Crate.io Client Library
 - [ ] Error Handling
 - [ ] Arg Statements
 - [x] Socket Connection
+- [ ] Implement Zewo SQL Connection Protocol
 
 ## Usage
 
