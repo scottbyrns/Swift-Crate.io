@@ -10,17 +10,33 @@ import S4
 
 public class CrateIO {
 
-    let socket : TCPClientSocket
-    let host: String
-    let port: Int
+    var sockets : [TCPClientSocket]
+    var currentSocket = -1
+    let hosts: [String]
+    let ports: [Int]
 
-  	public init(withHost host: String, onPort port: Int) throws {
-      self.host = host
-      self.port = port
-      socket = try TCPClientSocket(ip: IP(remoteAddress: host, port: port))
-  	}
+    public init(withHosts hosts: [String], onPorts ports: [Int]) throws {
+      self.hosts = hosts
+      self.ports = ports
+      sockets = [TCPClientSocket]()
+      for index in 0...hosts.count - 1 {
+        sockets.append(
+          try TCPClientSocket(ip: IP(remoteAddress: hosts[index], port: ports[index]))
+        )
+      }
+    }
+
+    private func nextSocket() -> TCPClientSocket {
+      currentSocket += 1
+      if currentSocket >= sockets.count {
+        currentSocket = 0
+      }
+      return sockets[currentSocket]
+    }
 
     public func sql (statement: String) throws -> JSON? {
+
+      let socket = nextSocket()
 
       let post = "{\"stmt\": \"\(statement)\"}\r\n"
       let postBytes = [UInt8](post.utf8)
@@ -66,6 +82,8 @@ public class CrateIO {
 
     public func blob (insert data: Data, into table: String) throws -> String? {
 
+      let socket = nextSocket()
+
       let digest = Digest.sha1(try String(data: data))
 
       let headers: Headers = [
@@ -104,6 +122,7 @@ public class CrateIO {
 
     public func blob (fetch digest: String, from table: String) throws -> Data {
 
+      let socket = nextSocket()
 
       let headers: Headers = [
           "User-Agent": HeaderValues("Swift-CrateIO")
@@ -154,7 +173,9 @@ public class CrateIO {
     }
 
     deinit {
+      for socket in sockets {
         socket.close()
+      }
     }
 
 }
