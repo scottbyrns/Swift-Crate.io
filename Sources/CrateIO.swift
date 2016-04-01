@@ -1,131 +1,160 @@
 
-import SocksCore
+import TCP
 import JSON
-import Foundation
 import Data
 import Digest
+import HTTP
+import HTTPParser
+import HTTPSerializer
+import S4
 
 public class CrateIO {
 
-    let socket : InternetSocket
+    let socket : TCPClientSocket
     let host: String
-    let port: UInt16
+    let port: Int
 
-  	public init(withHost host: String, onPort port: UInt16) throws {
+  	public init(withHost host: String, onPort port: Int) throws {
       self.host = host
       self.port = port
-      let raw = try! RawSocket(protocolFamily: .Inet, socketType: .Stream, protocol: .TCP)
-      let addr = InternetAddress(address: .Hostname(host), port: port)
-      socket = InternetSocket(rawSocket: raw, address: addr)
-      try! socket.connect()
-
+      socket = try TCPClientSocket(ip: IP(remoteAddress: host, port: port))
   	}
 
-    public func sql (statement: String) -> JSON? {
-      print("\(statement)")
+    public func sql (statement: String) throws -> JSON? {
 
       let post = "{\"stmt\": \"\(statement)\"}\r\n"
-      let postBytes = post.toBytes()
+      let postBytes = [UInt8](post.utf8)
 
-      let request = "POST /_sql HTTP/1.1\r\nContent-Length: \(postBytes.count)\r\nContent-Type: application/json\r\n\r\n\(post)"
+      let headers: Headers = [
+          "Content-Length": HeaderValues("\(postBytes.count)"),
+          "Content-Type": HeaderValues("application/json"),
+          "User-Agent": HeaderValues("Swift-CrateIO")
+      ]
 
-//      print(request)
-      try! socket.send(request.toBytes())
+      let request = try Request(method: .post, uri: "/_sql", headers: headers, body: post)
 
+      let requestData = Data(try requestToString(request))
+      try! socket.send(requestData)
 
       //receiving data
-      let received = try! socket.recv()
+      let received = try socket.receive(lowWaterMark: 1, highWaterMark: 1024*1024)
 
       //converting data to a string
-      let str = try! received.toString()
+      let str = try String(data: received)
 
-      //yay!
-      print("Received: \n\(str)")
-      // let NSUTF8StringEncoding = 8
+      // print("received: \(str)")
+
+      let parser = ResponseParser()
+
       do {
-        return try  JSONParser().parse(Data(NSString(string: str).componentsSeparatedByString("\r\n\r\n")[1]))
+        if let response = try parser.parse(str) {
+          switch response.body {
+            case .buffer(let data):
+              return try JSONParser().parse(data)
+            default:
+              break
+          }
+        }
       }
       catch {
-        return nil
+
       }
+      return nil
+
     }
 
 
+    public func blob (insert data: Data, into table: String) throws -> String? {
 
+      let digest = Digest.sha1(try String(data: data))
 
-    public func blob (insert data: String, into table: String) -> String? {
+      let headers: Headers = [
+          "Content-Length": HeaderValues("\(data.bytes.count)"),
+          "Content-Type": HeaderValues("application/x-www-form-urlencoded"),
+          "User-Agent": HeaderValues("Swift-CrateIO")
+      ]
 
-      let digest = Digest.sha1(data)
+      let request = try Request(method: .put, uri: "/_blobs/\(table)/\(digest)", headers: headers, body: data)
 
-      // let post = "{\"stmt\": \"\(statement)\"}\r\n"
-      let postBytes = data.toBytes()
-
-      let request = "PUT /_blobs/\(table)/\(digest) HTTP/1.1\r\nHost: \(self.host):\(self.port)\r\nUser-Agent: curl/7.43.0\r\nAccept: */*\r\nContent-Length: \(postBytes.count)\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\n"
-
-      print(request)
-      try! socket.send(request.toBytes())
-      try! socket.send(data.toBytes())
+      try! socket.send(Data(requestToString(request)))
 
       //receiving data
-      let received = try! socket.recv()
-
+      let received = try socket.receive(lowWaterMark: 1, highWaterMark: 1024)
       //converting data to a string
-      let str = try! received.toString()
+      let str = try String(data: received)
 
-      //yay!
-      print("Received: \n\(str)")
-      // let NSUTF8StringEncoding = 8
+      let parser = ResponseParser()
 
-
-      if NSString(string: str).componentsSeparatedByString("201 Created").count > 1 {
-        return digest
+      do {
+        if let response = try parser.parse(str) {
+          if response.statusCode == 201 {
+            return digest
+          }
+        }
       }
+      catch {
 
+      }
       return nil
     }
 
 
 
-    public func blob (fetch digest: String, from table: String) -> String? {
 
 
-      let request = "GET /_blobs/\(table)/\(digest) HTTP/1.1\r\n\r\n"
+    public func blob (fetch digest: String, from table: String) throws -> Data {
 
-//      print(request)
-      try! socket.send(request.toBytes())
+
+      let headers: Headers = [
+          "User-Agent": HeaderValues("Swift-CrateIO")
+      ]
+
+      let request = try Request(method: .get, uri: "/_blobs/\(table)/\(digest)", headers: headers)
+
+
+      try socket.send(Data(requestToString(request)))
 
 
       //receiving data
-      let received = try! socket.recv()
-
+      let received = try socket.receive(lowWaterMark: 1, highWaterMark: 1024)
       //converting data to a string
-      let str = try! received.toString()
+      let str = try String(data: received)
 
-      print(str)
-      if NSString(string: str).componentsSeparatedByString("200").count > 1 {
+
+      let parser = ResponseParser()
+
+      do {
+        if let response = try parser.parse(str) {
+          if response.statusCode == 200 {
+            switch response.body {
+              case .buffer(let data):
+                return data
+              default:
+                break
+            }
+          }
+        }
+      }
+      catch {
 
       }
-      else {
-        return nil
-      }
-      //
-      // //receiving data
-      // let receivedBlob = try! socket.recv()
-      //
-      // //converting data to a string
-      // let blob = try! receivedBlob.toString()
-      //
-      //
+      return nil
 
-      //yay!
-      // print("Received: \n\(blob)")
-      return NSString(string: str).componentsSeparatedByString("\r\n\r\n")[1]
 
     }
 
 
+
+    private func requestToString (request : Request) throws -> String {
+      var out = ""
+      try RequestSerializer().serialize(request) { data in
+        out += try String(data: data)
+      }
+      return out
+    }
+
     deinit {
-        try! socket.close()
+        socket.close()
     }
 
 }
