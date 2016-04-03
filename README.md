@@ -11,20 +11,44 @@ Crate.io Client Library
 
 - [x] Blobs
 - [x] Sql Statements
-- [ ] Connection Pool
+- [x] Connection Pool
 - [ ] Error Handling
 - [ ] Arg Statements
 - [x] Socket Connection
-- [ ] Implement Zewo SQL Connection Protocol
 
 ## Usage
+
+### Setup
+
+```swift
+
+// Create a set of TCPSocketClients to use as the connection pool.
+let connections = [TCPSocketClient]()
+let configuration = CratePoolConfiguration()
+
+// Set how long a pool can suffer a continued series of errors before it is removed from the pool.
+configuration.maxErrorDuration = 1.minute
+
+// Set how long to wait before trying to issue a connection to a consumer after finding none available.
+configuration.retryDelay = 10.milliseconds
+
+// How long to wait for a connection to be available before giving up.
+configuration.connectionWait = 30.milliseconds
+
+// How long to keep trying to reconnect a closed socket before removing it from the pool.
+configuration.maxReconnectDuration = 5.minutes
+
+
+var crate = try! CrateIO(pool: connections, using: configuration)
+
+```
 
 ### SQL
 
 ```swift
-
-var crate = try! CrateIO(withHost: "10.0.1.3", onPort: 4200 )
-crate.sql("create table if not exists t (name string) with (number_of_replicas = 0)")
+guard let json = try! crate.sql("create table if not exists t (name string) with (number_of_replicas = 0)") else {
+  
+}
 
 ```
 
