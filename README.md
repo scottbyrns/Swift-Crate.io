@@ -7,14 +7,14 @@ Crate.io Client Library
 [![License MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](https://tldrlegal.com/license/mit-license)
 [![Slack Status](https://zewo-slackin.herokuapp.com/badge.svg)](http://slack.zewo.io)
 
-## Status
+## Features
 
-- [x] Blobs
 - [x] Sql Statements
-- [x] Connection Pool
+- [x] Blobs
+- [x] Connection Pools
+- [x] Socket Connections
 - [ ] Error Handling
 - [ ] Arg Statements
-- [x] Socket Connection
 
 ## Usage
 
