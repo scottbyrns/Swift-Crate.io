@@ -7,31 +7,23 @@ import HTTP
 import HTTPParser
 import HTTPSerializer
 import S4
+import ConnectionPool
 
 public class CrateIO {
 
     var socketPool : ConnectionPool<TCPClientSocket>
     var currentSocket = -1
-    let hosts: [String]
-    let ports: [Int]
 
     public init(pool connections: [TCPClientSocket], using configuration: CratePoolConfiguration) throws {
-		socketPool = ConnectionPool<TCPClientSocket>(pool: connections, using: configuration)
+		    socketPool = ConnectionPool<TCPClientSocket>(pool: connections, using: configuration)
     }
 
-    private func nextSocket() -> TCPClientSocket {
-      currentSocket += 1
-      if currentSocket >= sockets.count {
-        currentSocket = 0
-      }
-      return sockets[currentSocket]
-    }
 
     public func sql (statement: String) throws -> JSON? {
 
         // Get a connection from the pool to use.
-	    return try pool.with({ connection in
-			
+	    return try socketPool.with({ connection in
+// print(ObjectIdentifier(connection).hashValue)
 	        let post = "{\"stmt\": \"\(statement)\"}\r\n"
 	        let postBytes = [UInt8](post.utf8)
 
@@ -43,7 +35,7 @@ public class CrateIO {
 
 	        let request = try Request(method: .post, uri: "/_sql", headers: headers, body: post)
 
-	        let requestData = Data(try requestToString(request))
+	        let requestData = Data(try self.requestToString(request))
 	        try! connection.send(requestData)
 
 	        //receiving data
@@ -69,8 +61,8 @@ public class CrateIO {
 	        catch {
 
 	        }
-			
-	    })
+          return nil
+	    }) as? JSON
 
     }
 
@@ -78,7 +70,7 @@ public class CrateIO {
     public func blob (insert data: Data, into table: String) throws -> String? {
 
 	    // Get a connection from the pool to use.
-	    return try pool.with({ connection in
+	    return try socketPool.with({ connection in
 
 	        let digest = Digest.sha1(try String(data: data))
 
@@ -90,7 +82,7 @@ public class CrateIO {
 
 	        let request = try Request(method: .put, uri: "/_blobs/\(table)/\(digest)", headers: headers, body: data)
 
-	        try! connection.send(Data(requestToString(request)))
+	        try! connection.send(Data(self.requestToString(request)))
 
 	        //receiving data
 	        let received = try connection.receive(lowWaterMark: 1, highWaterMark: 1024)
@@ -109,19 +101,20 @@ public class CrateIO {
 	        catch {
 
 	        }
-			
-	    })
-		
+          return nil
+
+	    }) as? String
+
     }
 
 
 
 
 
-    public func blob (fetch digest: String, from table: String) throws -> Data {
+    public func blob (fetch digest: String, from table: String) throws -> Data? {
 
         // Get a connection from the pool to use.
-        return try pool.with({ connection in
+        return try socketPool.with({ connection in
 
 	        let headers: Headers = [
 	            "User-Agent": HeaderValues("Swift-CrateIO")
@@ -130,7 +123,7 @@ public class CrateIO {
 	        let request = try Request(method: .get, uri: "/_blobs/\(table)/\(digest)", headers: headers)
 
 
-	        try connection.send(Data(requestToString(request)))
+	        try connection.send(Data(self.requestToString(request)))
 
 
 	        //receiving data
@@ -156,8 +149,9 @@ public class CrateIO {
 	        catch {
 
 	        }
-			
-        })
+          return nil
+
+        }) as? Data
 
     }
 
@@ -172,9 +166,7 @@ public class CrateIO {
     }
 
     deinit {
-      for socket in sockets {
-        socket.close()
-      }
+
     }
 
 }

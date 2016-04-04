@@ -1,3 +1,6 @@
+import ConnectionPool
+import Venice
+
 public class CratePoolConfiguration : PoolConfiguration {
 
     // Set how long a pool can suffer a continued series of errors before it is removed from the pool.
