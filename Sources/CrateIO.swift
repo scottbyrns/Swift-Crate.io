@@ -8,19 +8,31 @@ import HTTPParser
 import HTTPSerializer
 import S4
 import ConnectionPool
+// import Log
+// import StandardOutputAppender
 
 public class CrateIO {
 
-    var socketPool : ConnectionPool<TCPClientSocket>
+  // var logger = Logger(name: "CrateIO", appender: StandardOutputAppender())
+
+// public init(name: String, appender: Appender, levels: Log.Level = .all) {
+//     appenders.append(appender)
+//     self.levels = levels
+//     self.name = name
+// }
+
+
+    var socketPool : ConnectionPool<TCPConnection>
     var currentSocket = -1
 
-    public init(pool connections: [TCPClientSocket], using configuration: CratePoolConfiguration) throws {
-		    socketPool = ConnectionPool<TCPClientSocket>(pool: connections, using: configuration)
+    public init(pool connections: [TCPConnection], using configuration: CratePoolConfiguration) throws {
+		    socketPool = ConnectionPool<TCPConnection>(pool: connections, using: configuration)
     }
 
 
     public func sql (statement: String) throws -> JSON? {
 
+      // logger.log(statement)
         // Get a connection from the pool to use.
 	    return try socketPool.with({ connection in
 // print(ObjectIdentifier(connection).hashValue)
@@ -36,15 +48,18 @@ public class CrateIO {
 	        let request = try Request(method: .post, uri: "/_sql", headers: headers, body: post)
 
 	        let requestData = Data(try self.requestToString(request))
+          // print("About to send")
+          // print(requestData)
 	        try! connection.send(requestData)
-
+          // print("Sent")
+          // try! connection.flush()
 	        //receiving data
-	        let received = try connection.receive(lowWaterMark: 1, highWaterMark: 1024*1024)
-
+	        let received = try connection.receive(max: 1024*1024)
+          print("Received: \(received)")
 	        //converting data to a string
 	        let str = try String(data: received)
 
-	        // print("received: \(str)")
+	        print("received: \(str)")
 
 	        let parser = ResponseParser()
 
@@ -85,7 +100,7 @@ public class CrateIO {
 	        try! connection.send(Data(self.requestToString(request)))
 
 	        //receiving data
-	        let received = try connection.receive(lowWaterMark: 1, highWaterMark: 1024)
+	        let received = try connection.receive(max: 1024)
 	        //converting data to a string
 	        let str = try String(data: received)
 
@@ -127,7 +142,7 @@ public class CrateIO {
 
 
 	        //receiving data
-	        let received = try connection.receive(lowWaterMark: 1, highWaterMark: 1024)
+	        let received = try connection.receive(max: 1024)
 	        //converting data to a string
 	        let str = try String(data: received)
 
