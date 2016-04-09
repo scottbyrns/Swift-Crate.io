@@ -8,34 +8,18 @@ import HTTPParser
 import HTTPSerializer
 import S4
 import ConnectionPool
-// import Log
-// import StandardOutputAppender
 
 public class CrateIO {
 
-  // var logger = Logger(name: "CrateIO", appender: StandardOutputAppender())
-
-// public init(name: String, appender: Appender, levels: Log.Level = .all) {
-//     appenders.append(appender)
-//     self.levels = levels
-//     self.name = name
-// }
-
-
-    var socketPool : ConnectionPool<TCPConnection>
-    var currentSocket = -1
+    var socketPool: ConnectionPool<TCPConnection>
 
     public init(pool connections: [TCPConnection], using configuration: CratePoolConfiguration) throws {
 		    socketPool = ConnectionPool<TCPConnection>(pool: connections, using: configuration)
     }
 
-
     public func sql (statement: String) throws -> JSON? {
-
-      // logger.log(statement)
         // Get a connection from the pool to use.
 	    return try socketPool.with({ connection in
-// print(ObjectIdentifier(connection).hashValue)
 	        let post = "{\"stmt\": \"\(statement)\"}\r\n"
 	        let postBytes = [UInt8](post.utf8)
 
@@ -48,15 +32,13 @@ public class CrateIO {
 	        let request = try Request(method: .post, uri: "/_sql", headers: headers, body: post)
 
 	        let requestData = Data(try self.requestToString(request))
-          // print("About to send")
-          // print(requestData)
+
 	        try! connection.send(requestData)
-          // print("Sent")
-          // try! connection.flush()
-	        //receiving data
-	        let received = try connection.receive(max: 1024*1024)
+
+          let received = try connection.receive(max: 5000000)
           print("Received: \(received)")
-	        //converting data to a string
+
+          //converting data to a string
 	        let str = try String(data: received)
 
 	        print("received: \(str)")
@@ -81,7 +63,6 @@ public class CrateIO {
 
     }
 
-
     public func blob (insert data: Data, into table: String) throws -> String? {
 
 	    // Get a connection from the pool to use.
@@ -100,18 +81,20 @@ public class CrateIO {
 	        try! connection.send(Data(self.requestToString(request)))
 
 	        //receiving data
-	        let received = try connection.receive(max: 1024)
+	        let received = try connection.receive(max: 50000000)
 	        //converting data to a string
 	        let str = try String(data: received)
 
 	        let parser = ResponseParser()
 
 	        do {
-	          if let response = try parser.parse(str) {
-	            if response.statusCode == 201 {
-	              return digest
-	            }
+	          guard let response = try parser.parse(str) else {
+              return nil
 	          }
+
+            if response.statusCode == 201 || response.statusCode == 409 {
+              return digest
+            }
 	        }
 	        catch {
 
@@ -121,10 +104,6 @@ public class CrateIO {
 	    }) as? String
 
     }
-
-
-
-
 
     public func blob (fetch digest: String, from table: String) throws -> Data? {
 
@@ -142,7 +121,7 @@ public class CrateIO {
 
 
 	        //receiving data
-	        let received = try connection.receive(max: 1024)
+	        let received = try connection.receive(max: 50000000)
 	        //converting data to a string
 	        let str = try String(data: received)
 
@@ -150,19 +129,21 @@ public class CrateIO {
 	        let parser = ResponseParser()
 
 	        do {
-	          if let response = try parser.parse(str) {
-	            if response.statusCode == 200 {
-	              switch response.body {
-	                case .buffer(let data):
-	                  return data
-	                default:
-	                  break
-	              }
-	            }
+	          guard let response = try parser.parse(str) else {
+              return nil
 	          }
+            if response.statusCode == 200 {
+              switch response.body {
+                case .buffer(let data):
+                  return data
+                default:
+                  break
+              }
+            }
+
 	        }
 	        catch {
-
+            // Fall through
 	        }
           return nil
 
